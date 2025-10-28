@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume Scorer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f6f9fc;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      gap: 30px;
+      padding: 40px;
+      margin: 0;
+    }
+    .left-panel, .right-panel {
+      background: #fff;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+      width: 400px;
+    }
+    .logo {
+      width: 120px;
+      display: block;
+      margin: 0 auto 15px;
+    }
+    h2, h3 {
+      color: #333;
+      text-align: center;
+    }
+    input[type="file"] {
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      transition: background 0.3s;
+    }
+    button:hover { background-color: #0056b3; }
+    .result { margin-top: 20px; }
+    canvas { margin-top: 20px; }
+
+    iframe {
+      width: 100%;
+      height: 400px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- LEFT: Upload & Score -->
+  <div class="left-panel">
+    <img src="https://inistate.com/assets/inistate-logo.png" alt="Inistate Logo" class="logo">
+    <h2>Resume Scorer</h2>
+
+    <input type="file" id="resumeFile" accept=".pdf,.docx">
+    <button onclick="uploadResume()">Upload & Score</button>
+
+    <div class="result">
+      <h3 id="remarks"></h3>
+      <canvas id="scoreChart" width="200" height="200" style="display:none;"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT: PDF Preview + Summary -->
+  <div class="right-panel">
+    <h3>Resume Preview</h3>
+    <iframe id="pdfPreview" style="display:none;"></iframe>
+
+    
+  </div>
+
+  <script>
+  async function uploadResume() {
+    const fileInput = document.getElementById('resumeFile');
+    const file = fileInput.files[0];
+    if (!file) {
+      alert("Please select a resume file first!");
+      return;
+    }
+
+    // Preview PDF (only for .pdf files)
+    const pdfFrame = document.getElementById("pdfPreview");
+    if (file.type === "application/pdf") {
+      pdfFrame.src = URL.createObjectURL(file);
+      pdfFrame.style.display = "block";
+    } else {
+      pdfFrame.style.display = "none";
+    }
+
+    const formData = new FormData();
+    formData.append("resume", file);
+
+    let data;
+    try {
+      const response = await fetch("http://127.0.0.1:5000/upload", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!response.ok) {
+        alert("Upload failed: " + response.statusText);
+        return;
+      }
+
+      data = await response.json();
+      console.log("Backend response:", data); // Debug
+    } catch (error) {
+      alert("Error uploading file: " + error);
+      return;
+    }
+
+    // Display remarks
+    document.getElementById("remarks").innerHTML =
+      `Score: <b>${data.score}</b><br>Remarks: ${data.remarks}`;
+
+    // Display chart
+    const chartCanvas = document.getElementById("scoreChart");
+    chartCanvas.style.display = "block";
+    const ctx = chartCanvas.getContext("2d");
+    if (window.scoreChart) window.scoreChart.destroy();
+
+    window.scoreChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Score', 'Remaining'],
+        datasets: [{
+          data: [data.score, 100 - data.score],
+          backgroundColor: ['#007bff', '#e0e0e0'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        cutout: '70%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+          title: {
+            display: true,
+            text: `${data.score}%`,
+            color: '#333',
+            font: { size: 24, weight: 'bold' },
+            padding: { top: 10, bottom: 10 }
+          }
+        }
+      }
+    });
+
+    
+  }
+  </script>
+
+</body>
+</html>
