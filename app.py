@@ -1,9 +1,9 @@
+import os
+import re
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pdfminer.high_level import extract_text
 from docx import Document
-import os
-import re
 
 app = Flask(__name__)
 CORS(app)
@@ -11,47 +11,74 @@ CORS(app)
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+
 def extract_resume_text(file):
+    """
+    Save the uploaded file temporarily, extract text, then delete the file.
+    Supports PDF and DOCX.
+    """
     filename = file.filename
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     file.save(file_path)
 
+    text = ""
     if filename.endswith(".pdf"):
-        text = extract_text(file_path)
+        try:
+            text = extract_text(file_path)
+        except Exception as e:
+            print(f"Error extracting PDF: {e}")
     elif filename.endswith(".docx"):
-        doc = Document(file_path)
-        text = "\n".join([p.text for p in doc.paragraphs])
-    else:
-        text = ""
+        try:
+            doc = Document(file_path)
+            text = "\n".join([p.text for p in doc.paragraphs])
+        except Exception as e:
+            print(f"Error extracting DOCX: {e}")
 
-    # Delete the file after reading (optional)
     os.remove(file_path)
     return text
 
-def score_resume(text):
-    score = 0
-    text_lower = text.lower()
 
-    # Skills
-    skills = ["python", "java", "sql", "teamwork", "communication", "leadership"]
-    for skill in skills:
-        if skill in text_lower:
-            score += 10
+def score_resume(text):
+    """
+    Score resume based on keywords in different categories.
+    Returns total score, remarks, and breakdown.
+    """
+    text_lower = text.lower()
+    breakdown = {
+        "Technical Skills": 0,
+        "Education": 0,
+        "Experience": 0,
+        "Projects": 0,
+        "Soft Skills": 0
+    }
+
+    # Technical Skills
+    tech_skills = ["python", "java", "html", "css", "sql", "javascript", "c++", "php"]
+    tech_hits = sum(skill in text_lower for skill in tech_skills)
+    breakdown["Technical Skills"] = min(tech_hits * 5, 35)
 
     # Education
-    if re.search(r"|spm|master|phd|degree|bachelor|diploma|university", text_lower):
-        score += 10
+    if re.search(r"spm|degree|bachelor|diploma|university|master|phd", text_lower):
+        breakdown["Education"] = 15
 
     # Experience
     if "experience" in text_lower:
-        score += 20
+        breakdown["Experience"] = 20
 
     # Projects
     if "project" in text_lower:
-        score += 10
+        breakdown["Projects"] = 15
 
-    remarks = "Strong resume" if score >= 60 else "Needs improvement"
-    return score, remarks
+    # Soft Skills
+    soft_skills = ["teamwork", "communication", "leadership", "creativity", "problem-solving"]
+    soft_hits = sum(skill in text_lower for skill in soft_skills)
+    breakdown["Soft Skills"] = min(soft_hits * 5, 15)
+
+    total_score = sum(breakdown.values())
+    remarks = "Excellent Resume" if total_score >= 70 else "Needs Improvement"
+
+    return total_score, remarks, breakdown
+
 
 @app.route("/upload", methods=["POST"])
 def upload_resume():
@@ -63,8 +90,17 @@ def upload_resume():
         return jsonify({"error": "No selected file"}), 400
 
     text = extract_resume_text(file)
-    score, remarks = score_resume(text)
-    return jsonify({"score": score, "remarks": remarks})
+    score, remarks, breakdown = score_resume(text)
+
+    return jsonify({
+        "score": score,
+        "remarks": remarks,
+        "breakdown": breakdown
+    })
+
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Use Render's port or default to 5000
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
+
